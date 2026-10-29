@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Confidentialité : la page ne peut charger que ses propres fichiers et n'a le droit d'envoyer aucune requête réseau. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>Comparateur Oracle / Snowflake</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <div>
+        <h1>Comparateur Oracle&nbsp;/&nbsp;Snowflake</h1>
+        <p class="subtitle">Contrôle de cohérence des tables migrées à partir d'exports CSV</p>
+      </div>
+      <p class="privacy" title="Les fichiers sont lus par votre navigateur. Aucune requête réseau n'est autorisée par la page.">
+        🔒 Traitement 100&nbsp;% local, aucune donnée envoyée
+      </p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>1. Fichiers</h2>
+        <button type="button" id="add-table" class="btn primary">+ Ajouter une table</button>
+      </div>
+      <p class="hint">Chaque CSV (séparateur «&nbsp;,&nbsp;», UTF-8) doit contenir une colonne <code>CLE</code> qui identifie la ligne de façon unique, par exemple <code>siret|buic|rrdi</code>. Les fichiers ne sont pas conservés : il faut les redéposer après un rechargement de la page.</p>
+      <div id="tables"></div>
+
+      <details class="options">
+        <summary>Règles de comparaison</summary>
+        <div class="options-grid" id="options">
+          <label class="opt-num">Tolérance numérique
+            <input type="number" id="opt-tolerance" min="0" step="0.001">
+          </label>
+          <label><input type="checkbox" id="opt-ignoreLeadingZeros"> Ignorer les zéros non significatifs <span class="muted">(0010 = 10)</span></label>
+          <label><input type="checkbox" id="opt-normalizeDates"> Normaliser les dates <span class="muted">(29/10/2026 = 2026-10-29 00:00:00.000)</span></label>
+          <label><input type="checkbox" id="opt-nullEquivalent"> Vide = NULL</label>
+          <label><input type="checkbox" id="opt-trim"> Ignorer les espaces en début et fin</label>
+          <label><input type="checkbox" id="opt-ignoreCase"> Ignorer la casse <span class="muted">(ABC = abc)</span></label>
+        </div>
+      </details>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>2. Tableau de bord</h2>
+        <button type="button" id="export-all" class="btn">Exporter tous les écarts</button>
+      </div>
+      <div id="dashboard"></div>
+    </section>
+
+    <section class="panel" id="detail-panel" hidden>
+      <div id="detail"></div>
+    </section>
+  </main>
+
+  <script src="js/csv.js"></script>
+  <script src="js/compare.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
