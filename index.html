@@ -6,19 +6,23 @@
   <!-- Confidentialité : la page ne peut charger que ses propres fichiers et n'a le droit d'envoyer aucune requête réseau. -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
   <meta name="referrer" content="no-referrer">
-  <title>Comparateur Oracle / Snowflake</title>
+  <title>Comparateur de tables CSV</title>
+  <script src="js/theme.js"></script>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <header class="topbar">
     <div class="wrap topbar-inner">
       <div>
-        <h1>Comparateur Oracle&nbsp;/&nbsp;Snowflake</h1>
-        <p class="subtitle">Contrôle de cohérence des tables migrées à partir d'exports CSV</p>
+        <h1>Comparateur de tables CSV</h1>
+        <p class="subtitle">Comparaison ligne à ligne et colonne par colonne de deux exports CSV</p>
       </div>
-      <p class="privacy" title="Les fichiers sont lus par votre navigateur. Aucune requête réseau n'est autorisée par la page.">
-        🔒 Traitement 100&nbsp;% local, aucune donnée envoyée
-      </p>
+      <div class="topbar-actions">
+        <p class="privacy" title="Les fichiers sont lus par votre navigateur. Aucune requête réseau n'est autorisée par la page.">
+          🔒 Traitement 100&nbsp;% local, aucune donnée envoyée
+        </p>
+        <button type="button" id="theme-toggle" class="icon-btn theme-btn"></button>
+      </div>
     </div>
   </header>
 
@@ -28,7 +32,10 @@
         <h2>1. Fichiers</h2>
         <button type="button" id="add-table" class="btn primary">+ Ajouter une table</button>
       </div>
-      <p class="hint">Chaque CSV (séparateur «&nbsp;,&nbsp;», UTF-8) doit contenir une colonne <code>CLE</code> qui identifie la ligne de façon unique, par exemple <code>siret|buic|rrdi</code>. Les fichiers ne sont pas conservés : il faut les redéposer après un rechargement de la page.</p>
+      <div class="source-names">
+        <label><span class="sw sa"></span> Source A <input type="text" id="name-a" maxlength="40" spellcheck="false"></label>
+        <label><span class="sw sb"></span> Source B <input type="text" id="name-b" maxlength="40" spellcheck="false"></label>
+      </div>
       <div id="tables"></div>
 
       <details class="options">

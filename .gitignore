@@ -1,0 +1,3 @@
+# Ne jamais versionner de vrais exports : seuls les exemples fictifs sont autorisés.
+*.csv
+!exemples/*.csv

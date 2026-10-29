@@ -1,5 +1,5 @@
 /*
- * Moteur de comparaison Oracle / Snowflake.
+ * Moteur de comparaison de deux exports CSV (source A / source B).
  * Aucune dépendance au DOM : utilisable dans le navigateur et sous Node (tests).
  */
 (function (root) {
@@ -149,56 +149,49 @@
 
   /* ---------- Comparaison de deux fichiers ---------- */
 
-  function compareTables(oracleRows, snowRows, options) {
+  function compareTables(rowsA, rowsB, options) {
     const opts = Object.assign({}, DEFAULT_OPTIONS, options || {});
-    const oracle = buildTable(oracleRows);
-    const snow = buildTable(snowRows);
-    if (oracle.error || snow.error) {
-      return {
-        error: [
-          oracle.error && 'Oracle : ' + oracle.error,
-          snow.error && 'Snowflake : ' + snow.error,
-        ]
-          .filter(Boolean)
-          .join(' '),
-      };
+    const ta = buildTable(rowsA);
+    const tb = buildTable(rowsB);
+    if (ta.error || tb.error) {
+      return { error: true, errorA: ta.error || null, errorB: tb.error || null };
     }
 
     // Colonnes (comparaison insensible à la casse et à l'ordre)
     const common = [];
-    const oracleOnly = [];
-    oracle.norm.forEach((h, i) => {
-      if (i === oracle.keyIndex) return;
-      if (oracle.colIndex.get(h) !== i) return; // en-tête dupliqué
-      if (snow.colIndex.has(h) && snow.colIndex.get(h) !== snow.keyIndex) {
-        common.push({ name: oracle.headers[i], o: i, s: snow.colIndex.get(h) });
+    const aOnly = [];
+    ta.norm.forEach((h, i) => {
+      if (i === ta.keyIndex) return;
+      if (ta.colIndex.get(h) !== i) return; // en-tête dupliqué
+      if (tb.colIndex.has(h) && tb.colIndex.get(h) !== tb.keyIndex) {
+        common.push({ name: ta.headers[i], a: i, b: tb.colIndex.get(h) });
       } else {
-        oracleOnly.push(oracle.headers[i]);
+        aOnly.push(ta.headers[i]);
       }
     });
-    const snowOnly = [];
-    snow.norm.forEach((h, i) => {
-      if (i === snow.keyIndex || snow.colIndex.get(h) !== i) return;
-      if (!oracle.colIndex.has(h)) snowOnly.push(snow.headers[i]);
+    const bOnly = [];
+    tb.norm.forEach((h, i) => {
+      if (i === tb.keyIndex || tb.colIndex.get(h) !== i) return;
+      if (!ta.colIndex.has(h)) bOnly.push(tb.headers[i]);
     });
 
-    const onlyOracle = oracle.order.filter((k) => !snow.map.has(k));
-    const onlySnow = snow.order.filter((k) => !oracle.map.has(k));
+    const onlyA = ta.order.filter((k) => !tb.map.has(k));
+    const onlyB = tb.order.filter((k) => !ta.map.has(k));
 
     const diffRows = [];
     const colCounts = new Map();
     let identical = 0;
-    for (const key of oracle.order) {
-      const so = snow.map.get(key);
-      if (!so) continue;
-      const ro = oracle.map.get(key);
+    for (const key of ta.order) {
+      const rb = tb.map.get(key);
+      if (!rb) continue;
+      const ra = ta.map.get(key);
       const diffs = [];
       for (const c of common) {
-        const vo = ro[c.o];
-        const vs = so[c.s];
-        const d = compareValues(vo, vs, opts);
+        const va = ra[c.a];
+        const vb = rb[c.b];
+        const d = compareValues(va, vb, opts);
         if (d) {
-          diffs.push({ col: c.name, o: vo == null ? '' : vo, s: vs == null ? '' : vs, delta: d.delta });
+          diffs.push({ col: c.name, a: va == null ? '' : va, b: vb == null ? '' : vb, delta: d.delta });
           colCounts.set(c.name, (colCounts.get(c.name) || 0) + 1);
         }
       }
@@ -209,38 +202,38 @@
     const columnStats = common
       .filter((c) => colCounts.has(c.name))
       .map((c) => ({ col: c.name, count: colCounts.get(c.name) }))
-      .sort((a, b) => b.count - a.count);
+      .sort((x, y) => y.count - x.count);
 
-    const commonRows = oracle.order.length - onlyOracle.length;
+    const commonRows = ta.order.length - onlyA.length;
     const ok =
       !diffRows.length &&
-      !onlyOracle.length &&
-      !onlySnow.length &&
-      !oracle.duplicates.length &&
-      !snow.duplicates.length &&
-      !oracleOnly.length &&
-      !snowOnly.length;
+      !onlyA.length &&
+      !onlyB.length &&
+      !ta.duplicates.length &&
+      !tb.duplicates.length &&
+      !aOnly.length &&
+      !bOnly.length;
 
     return {
       ok,
-      oracle,
-      snow,
-      columns: { common, oracleOnly, snowOnly },
+      a: ta,
+      b: tb,
+      columns: { common, aOnly, bOnly },
       diffColumns: common.filter((c) => colCounts.has(c.name)).map((c) => c.name),
-      onlyOracle,
-      onlySnow,
+      onlyA,
+      onlyB,
       diffRows,
       columnStats,
       counts: {
-        oracle: oracle.rowCount,
-        snowflake: snow.rowCount,
+        a: ta.rowCount,
+        b: tb.rowCount,
         commonRows,
         identical,
         withDiffs: diffRows.length,
-        onlyOracle: onlyOracle.length,
-        onlySnow: onlySnow.length,
-        dupOracle: oracle.duplicates.length,
-        dupSnow: snow.duplicates.length,
+        onlyA: onlyA.length,
+        onlyB: onlyB.length,
+        dupA: ta.duplicates.length,
+        dupB: tb.duplicates.length,
         diffCells: diffRows.reduce((n, r) => n + r.diffs.length, 0),
       },
     };

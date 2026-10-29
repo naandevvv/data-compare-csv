@@ -10,19 +10,22 @@
   const { compareTables, DEFAULT_OPTIONS } = window.DataCompare;
 
   const STORAGE_KEY = 'data-compare-csv.v1';
-  const SIDES = [
-    { id: 'oracle', label: 'Oracle' },
-    { id: 'snowflake', label: 'Snowflake' },
-  ];
+  const SIDES = ['a', 'b'];
+  const DEFAULT_NAMES = { a: 'Source A', b: 'Source B' };
   const MAX_GRID_CELLS = 200000;
 
   const state = {
     tables: [],
     options: Object.assign({}, DEFAULT_OPTIONS),
+    names: Object.assign({}, DEFAULT_NAMES),
     selectedId: null,
-    view: { tab: 'ecarts', search: '', column: '', allCols: false },
+    view: freshView(),
   };
   let nextId = 1;
+
+  function freshView() {
+    return { tab: 'ecarts', search: '', column: '', allCols: false, rawSide: 'a', rawSearch: '' };
+  }
 
   const $ = (sel, el) => (el || document).querySelector(sel);
   const esc = (v) =>
@@ -30,15 +33,16 @@
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     })[c]);
   const fmt = (n) => Number(n).toLocaleString('fr-FR');
+  const name = (side) => esc(state.names[side].trim() || DEFAULT_NAMES[side]);
   const cellText = (v) => (v === '' || v == null ? '<span class="empty">∅</span>' : esc(v));
 
-  /* ---------- Persistance (noms de tables + options uniquement) ---------- */
+  /* ---------- Persistance (noms et options uniquement, jamais les données) ---------- */
 
   function save() {
     try {
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ tables: state.tables.map((t) => t.name), options: state.options })
+        JSON.stringify({ tables: state.tables.map((t) => t.name), options: state.options, names: state.names })
       );
     } catch (e) { /* stockage indisponible : sans conséquence */ }
   }
@@ -48,10 +52,11 @@
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
       if (saved) {
         Object.assign(state.options, saved.options || {});
+        Object.assign(state.names, saved.names || {});
         (saved.tables || []).forEach((name) => addTable(name, true));
       }
     } catch (e) { /* ignore */ }
-    if (!state.tables.length) addTable('D6', true);
+    if (!state.tables.length) addTable('Table 1', true);
   }
 
   /* ---------- Gestion des tables ---------- */
@@ -72,7 +77,7 @@
   function removeTable(id) {
     const t = findTable(id);
     if (!t) return;
-    if ((t.files.oracle || t.files.snowflake) && !confirm('Supprimer la table « ' + t.name + ' » ?')) return;
+    if ((t.files.a || t.files.b) && !confirm('Supprimer la table « ' + t.name + ' » ?')) return;
     state.tables = state.tables.filter((x) => x.id !== id);
     if (state.selectedId === id) state.selectedId = null;
     save();
@@ -82,13 +87,13 @@
   const findTable = (id) => state.tables.find((t) => t.id === id);
 
   function compute(t) {
-    t.result = t.files.oracle && t.files.snowflake
-      ? compareTables(t.files.oracle.rows, t.files.snowflake.rows, state.options)
+    t.result = t.files.a && t.files.b
+      ? compareTables(t.files.a.rows, t.files.b.rows, state.options)
       : null;
   }
 
   function status(t) {
-    if (!t.files.oracle || !t.files.snowflake) return { cls: 'pending', label: 'En attente' };
+    if (!t.files.a || !t.files.b) return { cls: 'pending', label: 'En attente' };
     if (t.result.error) return { cls: 'error', label: 'Erreur' };
     if (t.result.ok) return { cls: 'ok', label: 'Identique' };
     return { cls: 'ko', label: 'Écarts' };
@@ -122,11 +127,11 @@
           '</div>' +
           '<div class="drops">' +
             SIDES.map((s) => {
-              const f = t.files[s.id];
+              const f = t.files[s];
               return (
-                '<label class="drop ' + s.id + (f ? ' loaded' : '') + '" data-side="' + s.id + '">' +
+                '<label class="drop ' + s + (f ? ' loaded' : '') + '" data-side="' + s + '">' +
                   '<input type="file" accept=".csv,text/csv" class="file-input">' +
-                  '<span class="side">' + s.label + '</span>' +
+                  '<span class="side">' + name(s) + '</span>' +
                   (f
                     ? '<span class="file" title="' + esc(f.name) + '">' + esc(f.name) + '</span>' +
                       '<span class="meta">' + fmt(Math.max(f.rows.length - 1, 0)) + ' lignes · ' + fmt(f.rows[0] ? f.rows[0].length : 0) + ' colonnes</span>'
@@ -161,26 +166,26 @@
         '<th scope="row">' + esc(t.name) + '</th>' +
         '<td><span class="badge ' + st.cls + '">' + st.label + '</span></td>';
       if (!r) return head + '<td colspan="9" class="muted">Déposez les deux fichiers.</td></tr>';
-      if (r.error) return head + '<td colspan="9" class="error-text">' + esc(r.error) + '</td></tr>';
+      if (r.error) return head + '<td colspan="9" class="error-text">' + errorText(r) + '</td></tr>';
       const c = r.counts;
-      const colIssues = r.columns.oracleOnly.length + r.columns.snowOnly.length;
+      const colIssues = r.columns.aOnly.length + r.columns.bOnly.length;
       return head +
-        '<td class="num">' + fmt(c.oracle) + '</td>' +
-        '<td class="num">' + fmt(c.snowflake) + '</td>' +
+        '<td class="num">' + fmt(c.a) + '</td>' +
+        '<td class="num">' + fmt(c.b) + '</td>' +
         '<td class="num good">' + fmt(c.identical) + '</td>' +
         num(c.withDiffs, 'bad') +
         num(r.columnStats.length, 'bad') +
-        num(c.onlyOracle, 'bad') +
-        num(c.onlySnow, 'bad') +
-        num(c.dupOracle + c.dupSnow, 'warn') +
+        num(c.onlyA, 'bad') +
+        num(c.onlyB, 'bad') +
+        num(c.dupA + c.dupB, 'warn') +
         num(colIssues, 'warn') +
         '</tr>';
     });
     $('#dashboard').innerHTML =
       '<div class="scroll"><table class="dash">' +
-      '<thead><tr><th>Table</th><th>Statut</th><th class="num">Lignes Oracle</th><th class="num">Lignes Snowflake</th>' +
+      '<thead><tr><th>Table</th><th>Statut</th><th class="num">Lignes ' + name('a') + '</th><th class="num">Lignes ' + name('b') + '</th>' +
       '<th class="num">Identiques</th><th class="num">Lignes en écart</th><th class="num">Colonnes en écart</th>' +
-      '<th class="num">Absentes de Snowflake</th><th class="num">Absentes d’Oracle</th><th class="num">Doublons de CLE</th>' +
+      '<th class="num">Absentes côté ' + name('b') + '</th><th class="num">Absentes côté ' + name('a') + '</th><th class="num">Doublons de CLE</th>' +
       '<th class="num">Colonnes non communes</th></tr></thead>' +
       '<tbody>' + rows.join('') + '</tbody></table></div>';
   }
@@ -198,18 +203,20 @@
     const r = t.result;
     const c = r.counts;
     const v = state.view;
-    const colIssues = r.columns.oracleOnly.length + r.columns.snowOnly.length;
+    const colIssues = r.columns.aOnly.length + r.columns.bOnly.length;
     const tabs = [
       ['ecarts', 'Écarts par ligne', c.withDiffs],
       ['colonnes', 'Synthèse par colonne', r.columnStats.length + colIssues],
-      ['manquantes', 'Lignes manquantes', c.onlyOracle + c.onlySnow],
-      ['doublons', 'Doublons de CLE', c.dupOracle + c.dupSnow],
+      ['manquantes', 'Lignes manquantes', c.onlyA + c.onlyB],
+      ['doublons', 'Doublons de CLE', c.dupA + c.dupB],
+      ['brut', 'Données brutes', null],
     ];
 
     let body = '';
     if (v.tab === 'ecarts') body = renderDiffGrid(r);
     else if (v.tab === 'colonnes') body = renderColumns(r);
     else if (v.tab === 'manquantes') body = renderMissing(r);
+    else if (v.tab === 'brut') body = renderRaw(t, r);
     else body = renderDuplicates(r);
 
     $('#detail').innerHTML =
@@ -222,14 +229,14 @@
         kpi('Identiques', c.identical, 'good') +
         kpi('Lignes en écart', c.withDiffs, c.withDiffs ? 'bad' : '') +
         kpi('Cellules en écart', c.diffCells, c.diffCells ? 'bad' : '') +
-        kpi('Absentes de Snowflake', c.onlyOracle, c.onlyOracle ? 'bad' : '') +
-        kpi('Absentes d’Oracle', c.onlySnow, c.onlySnow ? 'bad' : '') +
+        kpi('Absentes côté ' + name('b'), c.onlyA, c.onlyA ? 'bad' : '') +
+        kpi('Absentes côté ' + name('a'), c.onlyB, c.onlyB ? 'bad' : '') +
       '</div>' +
       warnings(r) +
       '<div class="tabs" role="tablist">' +
         tabs.map(([id, label, n]) =>
           '<button type="button" role="tab" class="tab' + (v.tab === id ? ' active' : '') + '" data-tab="' + id + '" aria-selected="' + (v.tab === id) + '">' +
-          label + ' <span class="count' + (n ? ' nz' : '') + '">' + fmt(n) + '</span></button>'
+          label + (n == null ? '' : ' <span class="count' + (n ? ' nz' : '') + '">' + fmt(n) + '</span>') + '</button>'
         ).join('') +
       '</div>' +
       '<div class="tab-body">' + body + '</div>';
@@ -243,12 +250,19 @@
     return '<div class="kpi ' + cls + '"><span class="kpi-n">' + fmt(n) + '</span><span class="kpi-l">' + label + '</span></div>';
   }
 
+  function errorText(r) {
+    return [r.errorA && name('a') + ' : ' + esc(r.errorA), r.errorB && name('b') + ' : ' + esc(r.errorB)]
+      .filter(Boolean).join(' ');
+  }
+
   function warnings(r) {
     const w = [];
-    if (r.oracle.badRows.length) w.push('Oracle : ' + r.oracle.badRows.length + ' ligne(s) avec un nombre de colonnes différent de l’en-tête (lignes ' + r.oracle.badRows.slice(0, 5).join(', ') + (r.oracle.badRows.length > 5 ? '…' : '') + ').');
-    if (r.snow.badRows.length) w.push('Snowflake : ' + r.snow.badRows.length + ' ligne(s) avec un nombre de colonnes différent de l’en-tête (lignes ' + r.snow.badRows.slice(0, 5).join(', ') + (r.snow.badRows.length > 5 ? '…' : '') + ').');
-    if (r.columns.oracleOnly.length) w.push('Colonnes présentes uniquement dans Oracle : ' + r.columns.oracleOnly.map(esc).join(', ') + '.');
-    if (r.columns.snowOnly.length) w.push('Colonnes présentes uniquement dans Snowflake : ' + r.columns.snowOnly.map(esc).join(', ') + '.');
+    SIDES.forEach((s) => {
+      const bad = r[s].badRows;
+      if (bad.length) w.push(name(s) + ' : ' + bad.length + ' ligne(s) avec un nombre de colonnes différent de l’en-tête (lignes ' + bad.slice(0, 5).join(', ') + (bad.length > 5 ? '…' : '') + ').');
+    });
+    if (r.columns.aOnly.length) w.push('Colonnes présentes uniquement dans ' + name('a') + ' : ' + r.columns.aOnly.map(esc).join(', ') + '.');
+    if (r.columns.bOnly.length) w.push('Colonnes présentes uniquement dans ' + name('b') + ' : ' + r.columns.bOnly.map(esc).join(', ') + '.');
     return w.length ? '<ul class="warnings">' + w.map((x) => '<li>' + x + '</li>').join('') + '</ul>' : '';
   }
 
@@ -279,19 +293,19 @@
         '<label class="toggle"><input type="checkbox" class="all-cols"' + (v.allCols ? ' checked' : '') + '> Afficher toutes les colonnes</label>' +
         '<span class="muted">' + fmt(rows.length) + ' ligne(s) · ' + fmt(cols.length) + ' colonne(s)</span>' +
       '</div>' +
-      '<p class="legend"><span class="sw o"></span>Oracle <span class="sw s"></span>Snowflake. Les cellules en rouge sont les écarts. Survolez une cellule pour voir l’écart numérique.</p>' +
+      '<p class="legend"><span class="sw sa"></span>' + name('a') + ' <span class="sw sb"></span>' + name('b') + '. Les cellules en rouge sont les écarts. Survolez une cellule pour voir l’écart numérique.</p>' +
       (truncated ? '<p class="warnings">Affichage limité aux ' + fmt(cols.length) + ' premières colonnes. Utilisez le filtre par colonne.</p>' : '');
 
     const head = '<thead><tr><th class="sticky-col">CLE</th>' + cols.map((c) => '<th>' + esc(c) + '</th>').join('') + '</tr></thead>';
     const body = rows.map((d) => {
       const dm = new Map(d.diffs.map((x) => [x.col, x]));
-      const ro = r.oracle.map.get(d.key);
+      const ra = r.a.map.get(d.key);
       return '<tr><th class="sticky-col key">' + esc(d.key) + '<span class="nb">' + d.diffs.length + ' écart' + (d.diffs.length > 1 ? 's' : '') + '</span></th>' +
         cols.map((col) => {
           const x = dm.get(col);
-          if (!x) return '<td class="same">' + cellText(ro[colMap.get(col).o]) + '</td>';
-          const tip = x.delta != null ? ' title="Écart Snowflake − Oracle : ' + esc(fmtDelta(x.delta)) + '"' : '';
-          return '<td class="diff"' + tip + '><div class="o">' + cellText(x.o) + '</div><div class="s">' + cellText(x.s) + '</div></td>';
+          if (!x) return '<td class="same">' + cellText(ra[colMap.get(col).a]) + '</td>';
+          const tip = x.delta != null ? ' title="Écart ' + name('b') + ' − ' + name('a') + ' : ' + esc(fmtDelta(x.delta)) + '"' : '';
+          return '<td class="diff"' + tip + '><div class="va">' + cellText(x.a) + '</div><div class="vb">' + cellText(x.b) + '</div></td>';
         }).join('') + '</tr>';
     }).join('');
 
@@ -319,10 +333,10 @@
     } else {
       html += '<p class="empty-state">Aucune colonne en écart sur les ' + fmt(r.columns.common.length) + ' colonnes communes.</p>';
     }
-    if (r.columns.oracleOnly.length || r.columns.snowOnly.length) {
+    if (r.columns.aOnly.length || r.columns.bOnly.length) {
       html += '<div class="two-cols">' +
-        listBlock('Uniquement dans Oracle', r.columns.oracleOnly) +
-        listBlock('Uniquement dans Snowflake', r.columns.snowOnly) + '</div>';
+        listBlock('Uniquement dans ' + name('a'), r.columns.aOnly) +
+        listBlock('Uniquement dans ' + name('b'), r.columns.bOnly) + '</div>';
     }
     return html;
   }
@@ -349,8 +363,8 @@
     const section = (title, table, keys) =>
       '<h3>' + title + ' <span class="count' + (keys.length ? ' nz' : '') + '">' + fmt(keys.length) + '</span></h3>' +
       (keys.length ? rowsTable(table, keys) : '<p class="muted">Aucune.</p>');
-    return section('Présentes dans Oracle, absentes de Snowflake', r.oracle, r.onlyOracle) +
-      section('Présentes dans Snowflake, absentes d’Oracle', r.snow, r.onlySnow);
+    return section('Présentes dans ' + name('a') + ', absentes côté ' + name('b'), r.a, r.onlyA) +
+      section('Présentes dans ' + name('b') + ', absentes côté ' + name('a'), r.b, r.onlyB);
   }
 
   function renderDuplicates(r) {
@@ -361,7 +375,56 @@
           list.map((d) => '<tr><th scope="row">' + esc(d.key) + '</th><td class="num warn">' + d.count + '</td></tr>').join('') + '</tbody></table>'
         : '<p class="muted">Aucun.</p>') + '</div>';
     return '<p class="hint">En cas de doublon, seule la première occurrence est comparée.</p>' +
-      '<div class="two-cols">' + block('Oracle', r.oracle.duplicates) + block('Snowflake', r.snow.duplicates) + '</div>';
+      '<div class="two-cols">' + block(name('a'), r.a.duplicates) + block(name('b'), r.b.duplicates) + '</div>';
+  }
+
+  function renderRaw(t, r) {
+    const v = state.view;
+    const side = v.rawSide;
+    const table = r[side];
+    const rows = t.files[side].rows;
+    const headers = rows[0];
+    const search = v.rawSearch.trim().toLowerCase();
+
+    // Repérage des écarts : index de colonne (dans ce fichier) par CLE
+    const colIdx = new Map(r.columns.common.map((c) => [c.name, c[side]]));
+    const diffCells = new Map(r.diffRows.map((d) => [d.key, new Set(d.diffs.map((x) => colIdx.get(x.col)))]));
+    const missing = new Set(side === 'a' ? r.onlyA : r.onlyB);
+    const dups = new Set(table.duplicates.map((d) => d.key));
+
+    let data = rows.slice(1).map((row, i) => ({ row, line: i + 2 }));
+    if (search) data = data.filter((d) => d.row.some((x) => String(x).toLowerCase().includes(search)));
+    let cols = headers.map((_, i) => i).filter((i) => i !== table.keyIndex);
+    let truncated = false;
+    if (data.length * cols.length > MAX_GRID_CELLS) {
+      data = data.slice(0, Math.max(1, Math.floor(MAX_GRID_CELLS / cols.length)));
+      truncated = true;
+    }
+
+    const controls =
+      '<div class="controls">' +
+        '<div class="seg" role="group" aria-label="Source">' +
+          SIDES.map((s) => '<button type="button" class="seg-btn ' + s + (side === s ? ' active' : '') + '" data-raw-side="' + s + '" aria-pressed="' + (side === s) + '">' + name(s) + '</button>').join('') +
+        '</div>' +
+        '<input type="search" class="search" data-field="rawSearch" placeholder="Rechercher une valeur…" value="' + esc(v.rawSearch) + '">' +
+        '<span class="muted">' + esc(t.files[side].name) + ' · ' + fmt(data.length) + ' ligne(s) · ' + fmt(headers.length) + ' colonne(s)</span>' +
+      '</div>' +
+      '<p class="legend"><span class="sw diff-sw"></span>Valeur en écart <span class="sw miss-sw"></span>Ligne absente de l\u2019autre source <span class="sw dup-sw"></span>CLE en doublon</p>' +
+      (truncated ? '<p class="warnings">Affichage limité aux ' + fmt(data.length) + ' premières lignes. Utilisez la recherche.</p>' : '');
+
+    const head = '<thead><tr><th class="sticky-col">CLE</th><th class="num">Ligne</th>' +
+      cols.map((i) => '<th>' + esc(headers[i]) + '</th>').join('') + '</tr></thead>';
+    const body = data.map(({ row, line }) => {
+      const key = String(row[table.keyIndex] == null ? '' : row[table.keyIndex]).trim();
+      const dc = diffCells.get(key);
+      const cls = missing.has(key) ? ' class="row-missing"' : dups.has(key) ? ' class="row-dup"' : '';
+      return '<tr' + cls + '><th class="sticky-col key">' + esc(key) + '</th><td class="num muted">' + line + '</td>' +
+        cols.map((i) => '<td' + (dc && dc.has(i) ? ' class="diff-raw"' : '') + '>' + cellText(row[i]) + '</td>').join('') + '</tr>';
+    }).join('');
+
+    return controls + (data.length
+      ? '<div class="scroll grid-wrap"><table class="grid raw">' + head + '<tbody>' + body + '</tbody></table></div>'
+      : '<p class="empty-state">Aucune ligne ne correspond à la recherche.</p>');
   }
 
   /* ---------- Export CSV (séparateur « ; » + BOM pour Excel FR) ---------- */
@@ -375,14 +438,14 @@
     const r = t.result;
     const out = [];
     if (!r || r.error) return out;
-    r.columns.oracleOnly.forEach((c) => out.push([t.name, 'COLONNE_ABSENTE_SNOWFLAKE', '', c, '', '', '']));
-    r.columns.snowOnly.forEach((c) => out.push([t.name, 'COLONNE_ABSENTE_ORACLE', '', c, '', '', '']));
-    r.onlyOracle.forEach((k) => out.push([t.name, 'LIGNE_ABSENTE_SNOWFLAKE', k, '', '', '', '']));
-    r.onlySnow.forEach((k) => out.push([t.name, 'LIGNE_ABSENTE_ORACLE', k, '', '', '', '']));
-    r.oracle.duplicates.forEach((d) => out.push([t.name, 'DOUBLON_ORACLE', d.key, '', d.count, '', '']));
-    r.snow.duplicates.forEach((d) => out.push([t.name, 'DOUBLON_SNOWFLAKE', d.key, '', '', d.count, '']));
+    r.columns.aOnly.forEach((c) => out.push([t.name, 'COLONNE_ABSENTE_B', '', c, '', '', '']));
+    r.columns.bOnly.forEach((c) => out.push([t.name, 'COLONNE_ABSENTE_A', '', c, '', '', '']));
+    r.onlyA.forEach((k) => out.push([t.name, 'LIGNE_ABSENTE_B', k, '', '', '', '']));
+    r.onlyB.forEach((k) => out.push([t.name, 'LIGNE_ABSENTE_A', k, '', '', '', '']));
+    r.a.duplicates.forEach((d) => out.push([t.name, 'DOUBLON_A', d.key, '', d.count, '', '']));
+    r.b.duplicates.forEach((d) => out.push([t.name, 'DOUBLON_B', d.key, '', '', d.count, '']));
     r.diffRows.forEach((d) => d.diffs.forEach((x) =>
-      out.push([t.name, 'ECART_VALEUR', d.key, x.col, x.o, x.s, x.delta == null ? '' : String(x.delta).replace('.', ',')])));
+      out.push([t.name, 'ECART_VALEUR', d.key, x.col, x.a, x.b, x.delta == null ? '' : String(x.delta).replace('.', ',')])));
     return out;
   }
 
@@ -392,7 +455,8 @@
       alert(tables.some((t) => t.result && !t.result.error) ? 'Aucun écart à exporter.' : 'Aucune table comparée.');
       return;
     }
-    const header = ['Table', 'Type', 'CLE', 'Colonne', 'Valeur Oracle', 'Valeur Snowflake', 'Écart numérique'];
+    const label = (s) => state.names[s].trim() || DEFAULT_NAMES[s];
+    const header = ['Table', 'Type', 'CLE', 'Colonne', 'Valeur ' + label('a') + ' (A)', 'Valeur ' + label('b') + ' (B)', 'Écart numérique (B − A)'];
     const csv = '﻿' + [header].concat(lines).map((l) => l.map(csvCell).join(';')).join('\r\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     const a = document.createElement('a');
@@ -426,6 +490,41 @@
         optionsChanged();
       });
     });
+  }
+
+  function bindNames() {
+    SIDES.forEach((s) => {
+      const el = $('#name-' + s);
+      el.value = state.names[s];
+      el.placeholder = DEFAULT_NAMES[s];
+      el.addEventListener('input', () => {
+        state.names[s] = el.value;
+        save();
+        renderAll();
+      });
+    });
+  }
+
+  /* ---------- Thème clair / sombre ---------- */
+
+  function bindTheme() {
+    const btn = $('#theme-toggle');
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const current = () => document.documentElement.getAttribute('data-theme') || (media.matches ? 'dark' : 'light');
+    const sync = () => {
+      const dark = current() === 'dark';
+      btn.textContent = dark ? '☀️' : '🌙';
+      btn.title = dark ? 'Passer en thème clair' : 'Passer en thème sombre';
+      btn.setAttribute('aria-label', btn.title);
+    };
+    btn.addEventListener('click', () => {
+      const next = current() === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem('data-compare-csv.theme', next); } catch (e) { /* ignore */ }
+      sync();
+    });
+    media.addEventListener('change', sync);
+    sync();
   }
 
   function optionsChanged() {
@@ -494,6 +593,12 @@
         renderDetail();
         return;
       }
+      const sideBtn = e.target.closest('[data-raw-side]');
+      if (sideBtn) {
+        state.view.rawSide = sideBtn.getAttribute('data-raw-side');
+        renderDetail();
+        return;
+      }
       const colRow = e.target.closest('.col-row');
       if (colRow) {
         Object.assign(state.view, { tab: 'ecarts', column: colRow.getAttribute('data-col'), allCols: false });
@@ -508,7 +613,7 @@
     let searchTimer = null;
     detail.addEventListener('input', (e) => {
       if (!e.target.classList.contains('search')) return;
-      state.view.search = e.target.value;
+      state.view[e.target.getAttribute('data-field') || 'search'] = e.target.value;
       clearTimeout(searchTimer);
       searchTimer = setTimeout(() => {
         const pos = $('#detail .search').selectionStart;
@@ -529,7 +634,7 @@
   function selectTable(id) {
     if (state.selectedId !== id) {
       state.selectedId = id;
-      state.view = { tab: 'ecarts', search: '', column: '', allCols: false };
+      state.view = freshView();
     }
     renderDashboard();
     renderDetail();
@@ -542,6 +647,8 @@
   }
 
   load();
+  bindTheme();
+  bindNames();
   bindOptions();
   bindEvents();
   renderAll();

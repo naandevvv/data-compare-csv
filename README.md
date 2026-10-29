@@ -1,7 +1,7 @@
-# Comparateur Oracle / Snowflake
+# Comparateur de tables CSV
 
-Outil web qui compare, table par table, les exports CSV d'Oracle et de Snowflake
-pour valider une migration. Il montre les lignes absentes d'un côté, les cellules
+Outil web qui compare, table par table, deux exports CSV d'une même table (source A
+et source B), par exemple pour valider une migration ou une recette. Il montre les lignes absentes d'un côté, les cellules
 dont la valeur diffère, les doublons de clé et les colonnes non communes.
 
 ## Confidentialité
@@ -25,24 +25,28 @@ Deux possibilités, sans Node ni installation :
 
 Ensuite :
 
-1. Cliquer sur **+ Ajouter une table** et la nommer (D6, D7…).
-2. Déposer le CSV Oracle et le CSV Snowflake dans les deux zones, par glisser-déposer
+1. Nommer les deux sources si besoin (par défaut « Source A » et « Source B »).
+2. Cliquer sur **+ Ajouter une table** et la nommer.
+3. Déposer le CSV de chaque source dans les deux zones, par glisser-déposer
    ou par clic. La comparaison se lance automatiquement.
-3. Le **tableau de bord** résume chaque table. Cliquer sur une ligne ouvre le **détail** :
-   - *Écarts par ligne* : grille avec la valeur Oracle (orange) et la valeur Snowflake
-     (bleu) surlignées en rouge pour chaque cellule différente ;
+4. Le **tableau de bord** résume chaque table. Cliquer sur une ligne ouvre le **détail** :
+   - *Écarts par ligne* : grille avec la valeur de la source A (orange) et celle de la
+     source B (bleu) surlignées en rouge pour chaque cellule différente ;
    - *Synthèse par colonne* : nombre de lignes en écart par colonne, utile pour repérer
      une règle de calcul fausse (cliquer sur une colonne filtre la grille) ;
    - *Lignes manquantes* et *Doublons de CLE*.
-4. **Exporter** les écarts au format CSV (séparateur `;`, compatible Excel FR).
+   - *Données brutes* : contenu complet du fichier de l'une ou l'autre source, avec recherche,
+     cellules en écart surlignées et lignes absentes de l'autre source mises en évidence.
+5. **Exporter** les écarts au format CSV (séparateur `;`, compatible Excel FR).
 
-Des fichiers d'exemple se trouvent dans `exemples/`.
+Des fichiers d'exemple se trouvent dans `exemples/`. Un bouton en haut à droite
+bascule entre le thème clair et le thème sombre.
 
 ### Format des fichiers
 
 - CSV séparé par des virgules, encodé en UTF-8, avec une ligne d'en-tête.
 - Une colonne **`CLE`** identifie la ligne de façon unique, par exemple
-  `siret_number|buic_number|rrdi_number`.
+  `num_commande|num_ligne`.
 - Les colonnes sont associées par leur nom, sans tenir compte de la casse ni de l'ordre.
 
 ### Règles de comparaison (modifiables dans l'interface)
