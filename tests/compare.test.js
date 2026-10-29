@@ -40,22 +40,24 @@ test('NULL, espaces et casse', () => {
 });
 
 test('compareTables détecte écarts, lignes manquantes, doublons et colonnes', () => {
-  const o = parseCSV('CLE,MONTANT,LIB,OLD\n1|a,10.00,x,1\n2|b,5,y,1\n3|c,1,z,1\n3|c,1,z,1\n');
-  const s = parseCSV('cle,lib,montant,NEW\n1|a,x,10,2\n2|b,Y,6,2\n4|d,w,1,2\n');
-  const r = compareTables(o, s);
+  const a = parseCSV('CLE,MONTANT,LIB,OLD\n1|a,10.00,x,1\n2|b,5,y,1\n3|c,1,z,1\n3|c,1,z,1\n');
+  const b = parseCSV('cle,lib,montant,NEW\n1|a,x,10,2\n2|b,Y,6,2\n4|d,w,1,2\n');
+  const r = compareTables(a, b);
   assert.strictEqual(r.ok, false);
-  assert.deepStrictEqual(r.onlyOracle, ['3|c']);
-  assert.deepStrictEqual(r.onlySnow, ['4|d']);
+  assert.deepStrictEqual(r.onlyA, ['3|c']);
+  assert.deepStrictEqual(r.onlyB, ['4|d']);
   assert.strictEqual(r.counts.identical, 1);
   assert.strictEqual(r.diffRows.length, 1);
   assert.deepStrictEqual(r.diffRows[0].diffs.map((d) => d.col), ['MONTANT', 'LIB']);
   assert.strictEqual(r.diffRows[0].diffs[0].delta, 1);
-  assert.deepStrictEqual(r.oracle.duplicates, [{ key: '3|c', count: 2 }]);
-  assert.deepStrictEqual(r.columns.oracleOnly, ['OLD']);
-  assert.deepStrictEqual(r.columns.snowOnly, ['NEW']);
+  assert.deepStrictEqual(r.a.duplicates, [{ key: '3|c', count: 2 }]);
+  assert.deepStrictEqual(r.columns.aOnly, ['OLD']);
+  assert.deepStrictEqual(r.columns.bOnly, ['NEW']);
 });
 
 test('compareTables signale une colonne CLE manquante', () => {
   const r = compareTables(parseCSV('ID,A\n1,2'), parseCSV('CLE,A\n1,2'));
-  assert.match(r.error, /Oracle/);
+  assert.ok(r.error);
+  assert.match(r.errorA, /CLE/);
+  assert.strictEqual(r.errorB, null);
 });
