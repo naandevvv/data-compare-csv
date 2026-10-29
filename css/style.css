@@ -210,3 +210,16 @@ p.warnings { padding-left: 12px; }
 @media (max-width: 700px) { .two-cols, .drops { grid-template-columns: 1fr; } }
 .tags { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .tags li { font-family: var(--mono); font-size: 12px; background: var(--warn-bg); color: var(--warn); padding: 2px 8px; border-radius: 4px; }
+
+/* Données brutes */
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.seg-btn { font: inherit; font-weight: 600; border: 0; background: var(--surface); color: var(--muted); padding: 5px 12px; cursor: pointer; }
+.seg-btn + .seg-btn { border-left: 1px solid var(--border); }
+.seg-btn.oracle.active { background: var(--oracle-bg); color: var(--oracle); }
+.seg-btn.snowflake.active { background: var(--snow-bg); color: var(--snow); }
+.grid.raw td.diff-raw { background: var(--bad-bg); color: var(--bad); font-weight: 600; }
+.grid.raw tr.row-missing td, .grid.raw tr.row-missing th { background: var(--warn-bg); }
+.grid.raw tr.row-dup th.key { box-shadow: inset 3px 0 0 var(--warn); }
+.sw.diff-sw { background: var(--bad); }
+.sw.miss-sw { background: var(--warn-bg); border: 1px solid var(--warn); margin-left: 8px; }
+.sw.dup-sw { background: var(--warn); margin-left: 8px; }

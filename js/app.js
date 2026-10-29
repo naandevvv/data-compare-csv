@@ -20,7 +20,7 @@
     tables: [],
     options: Object.assign({}, DEFAULT_OPTIONS),
     selectedId: null,
-    view: { tab: 'ecarts', search: '', column: '', allCols: false },
+    view: { tab: 'ecarts', search: '', column: '', allCols: false, rawSide: 'oracle', rawSearch: '' },
   };
   let nextId = 1;
 
@@ -204,12 +204,14 @@
       ['colonnes', 'Synthèse par colonne', r.columnStats.length + colIssues],
       ['manquantes', 'Lignes manquantes', c.onlyOracle + c.onlySnow],
       ['doublons', 'Doublons de CLE', c.dupOracle + c.dupSnow],
+      ['brut', 'Données brutes', null],
     ];
 
     let body = '';
     if (v.tab === 'ecarts') body = renderDiffGrid(r);
     else if (v.tab === 'colonnes') body = renderColumns(r);
     else if (v.tab === 'manquantes') body = renderMissing(r);
+    else if (v.tab === 'brut') body = renderRaw(t, r);
     else body = renderDuplicates(r);
 
     $('#detail').innerHTML =
@@ -229,7 +231,7 @@
       '<div class="tabs" role="tablist">' +
         tabs.map(([id, label, n]) =>
           '<button type="button" role="tab" class="tab' + (v.tab === id ? ' active' : '') + '" data-tab="' + id + '" aria-selected="' + (v.tab === id) + '">' +
-          label + ' <span class="count' + (n ? ' nz' : '') + '">' + fmt(n) + '</span></button>'
+          label + (n == null ? '' : ' <span class="count' + (n ? ' nz' : '') + '">' + fmt(n) + '</span>') + '</button>'
         ).join('') +
       '</div>' +
       '<div class="tab-body">' + body + '</div>';
@@ -364,6 +366,55 @@
       '<div class="two-cols">' + block('Oracle', r.oracle.duplicates) + block('Snowflake', r.snow.duplicates) + '</div>';
   }
 
+  function renderRaw(t, r) {
+    const v = state.view;
+    const side = v.rawSide;
+    const table = side === 'oracle' ? r.oracle : r.snow;
+    const rows = t.files[side].rows;
+    const headers = rows[0];
+    const search = v.rawSearch.trim().toLowerCase();
+
+    // Repérage des écarts : index de colonne (dans ce fichier) par CLE
+    const colIdx = new Map(r.columns.common.map((c) => [c.name, side === 'oracle' ? c.o : c.s]));
+    const diffCells = new Map(r.diffRows.map((d) => [d.key, new Set(d.diffs.map((x) => colIdx.get(x.col)))]));
+    const missing = new Set(side === 'oracle' ? r.onlyOracle : r.onlySnow);
+    const dups = new Set(table.duplicates.map((d) => d.key));
+
+    let data = rows.slice(1).map((row, i) => ({ row, line: i + 2 }));
+    if (search) data = data.filter((d) => d.row.some((x) => String(x).toLowerCase().includes(search)));
+    let cols = headers.map((_, i) => i).filter((i) => i !== table.keyIndex);
+    let truncated = false;
+    if (data.length * cols.length > MAX_GRID_CELLS) {
+      data = data.slice(0, Math.max(1, Math.floor(MAX_GRID_CELLS / cols.length)));
+      truncated = true;
+    }
+
+    const controls =
+      '<div class="controls">' +
+        '<div class="seg" role="group" aria-label="Source">' +
+          SIDES.map((s) => '<button type="button" class="seg-btn ' + s.id + (side === s.id ? ' active' : '') + '" data-raw-side="' + s.id + '" aria-pressed="' + (side === s.id) + '">' + s.label + '</button>').join('') +
+        '</div>' +
+        '<input type="search" class="search" data-field="rawSearch" placeholder="Rechercher une valeur…" value="' + esc(v.rawSearch) + '">' +
+        '<span class="muted">' + esc(t.files[side].name) + ' · ' + fmt(data.length) + ' ligne(s) · ' + fmt(headers.length) + ' colonne(s)</span>' +
+      '</div>' +
+      '<p class="legend"><span class="sw diff-sw"></span>Valeur en écart <span class="sw miss-sw"></span>Ligne absente de l\u2019autre source <span class="sw dup-sw"></span>CLE en doublon</p>' +
+      (truncated ? '<p class="warnings">Affichage limité aux ' + fmt(data.length) + ' premières lignes. Utilisez la recherche.</p>' : '');
+
+    const head = '<thead><tr><th class="sticky-col">CLE</th><th class="num">Ligne</th>' +
+      cols.map((i) => '<th>' + esc(headers[i]) + '</th>').join('') + '</tr></thead>';
+    const body = data.map(({ row, line }) => {
+      const key = String(row[table.keyIndex] == null ? '' : row[table.keyIndex]).trim();
+      const dc = diffCells.get(key);
+      const cls = missing.has(key) ? ' class="row-missing"' : dups.has(key) ? ' class="row-dup"' : '';
+      return '<tr' + cls + '><th class="sticky-col key">' + esc(key) + '</th><td class="num muted">' + line + '</td>' +
+        cols.map((i) => '<td' + (dc && dc.has(i) ? ' class="diff-raw"' : '') + '>' + cellText(row[i]) + '</td>').join('') + '</tr>';
+    }).join('');
+
+    return controls + (data.length
+      ? '<div class="scroll grid-wrap"><table class="grid raw">' + head + '<tbody>' + body + '</tbody></table></div>'
+      : '<p class="empty-state">Aucune ligne ne correspond à la recherche.</p>');
+  }
+
   /* ---------- Export CSV (séparateur « ; » + BOM pour Excel FR) ---------- */
 
   function csvCell(v) {
@@ -494,6 +545,12 @@
         renderDetail();
         return;
       }
+      const sideBtn = e.target.closest('[data-raw-side]');
+      if (sideBtn) {
+        state.view.rawSide = sideBtn.getAttribute('data-raw-side');
+        renderDetail();
+        return;
+      }
       const colRow = e.target.closest('.col-row');
       if (colRow) {
         Object.assign(state.view, { tab: 'ecarts', column: colRow.getAttribute('data-col'), allCols: false });
@@ -508,7 +565,7 @@
     let searchTimer = null;
     detail.addEventListener('input', (e) => {
       if (!e.target.classList.contains('search')) return;
-      state.view.search = e.target.value;
+      state.view[e.target.getAttribute('data-field') || 'search'] = e.target.value;
       clearTimeout(searchTimer);
       searchTimer = setTimeout(() => {
         const pos = $('#detail .search').selectionStart;
@@ -529,7 +586,7 @@
   function selectTable(id) {
     if (state.selectedId !== id) {
       state.selectedId = id;
-      state.view = { tab: 'ecarts', search: '', column: '', allCols: false };
+      state.view = { tab: 'ecarts', search: '', column: '', allCols: false, rawSide: 'oracle', rawSearch: '' };
     }
     renderDashboard();
     renderDetail();

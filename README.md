@@ -34,6 +34,8 @@ Ensuite :
    - *Synthèse par colonne* : nombre de lignes en écart par colonne, utile pour repérer
      une règle de calcul fausse (cliquer sur une colonne filtre la grille) ;
    - *Lignes manquantes* et *Doublons de CLE*.
+   - *Données brutes* : contenu complet du fichier Oracle ou Snowflake, avec recherche,
+     cellules en écart surlignées et lignes absentes de l'autre source mises en évidence.
 4. **Exporter** les écarts au format CSV (séparateur `;`, compatible Excel FR).
 
 Des fichiers d'exemple se trouvent dans `exemples/`.
