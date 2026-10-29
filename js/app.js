@@ -13,6 +13,9 @@
   const SIDES = ['a', 'b'];
   const DEFAULT_NAMES = { a: 'Source A', b: 'Source B' };
   const MAX_GRID_CELLS = 200000;
+  const SYNC_COL_W = 150; // largeur fixe des colonnes de la vue synchronisée (px)
+  const SYNC_KEY_W = 200;
+  let syncRows = 5; // nombre de lignes visibles par table dans la vue synchronisée
 
   const state = {
     tables: [],
@@ -24,7 +27,10 @@
   let nextId = 1;
 
   function freshView() {
-    return { tab: 'ecarts', search: '', column: '', allCols: false, rawSide: 'a', rawSearch: '' };
+    return {
+      tab: 'ecarts', search: '', column: '', allCols: false, rawSide: 'a', rawSearch: '',
+      syncSearch: '', syncDiffRows: false, syncDiffCols: false,
+    };
   }
 
   const $ = (sel, el) => (el || document).querySelector(sel);
@@ -209,6 +215,7 @@
       ['colonnes', 'Synthèse par colonne', r.columnStats.length + colIssues],
       ['manquantes', 'Lignes manquantes', c.onlyA + c.onlyB],
       ['doublons', 'Doublons de CLE', c.dupA + c.dupB],
+      ['sync', 'Comparaison synchronisée', null],
       ['brut', 'Données brutes', null],
     ];
 
@@ -217,6 +224,7 @@
     else if (v.tab === 'colonnes') body = renderColumns(r);
     else if (v.tab === 'manquantes') body = renderMissing(r);
     else if (v.tab === 'brut') body = renderRaw(t, r);
+    else if (v.tab === 'sync') body = renderSync(r);
     else body = renderDuplicates(r);
 
     $('#detail').innerHTML =
@@ -244,6 +252,7 @@
     document.querySelectorAll('#detail [data-w]').forEach((el) => {
       el.style.width = el.getAttribute('data-w') + '%';
     });
+    if (v.tab === 'sync') setupSync();
   }
 
   function kpi(label, n, cls) {
@@ -376,6 +385,134 @@
         : '<p class="muted">Aucun.</p>') + '</div>';
     return '<p class="hint">En cas de doublon, seule la première occurrence est comparée.</p>' +
       '<div class="two-cols">' + block(name('a'), r.a.duplicates) + block(name('b'), r.b.duplicates) + '</div>';
+  }
+
+  /* ---------- Comparaison synchronisée : A au-dessus de B, défilement lié ---------- */
+
+  function renderSync(r) {
+    const v = state.view;
+    const diffSets = new Map(r.diffRows.map((d) => [d.key, new Set(d.diffs.map((x) => x.col))]));
+    const onlyA = new Set(r.onlyA);
+    const onlyB = new Set(r.onlyB);
+
+    // Colonnes alignées : communes (ordre de A), puis propres à A, puis propres à B
+    const diffCols = new Set(r.diffColumns);
+    let cols = r.columns.common.map((c) => ({ name: c.name, a: c.a, b: c.b, diff: diffCols.has(c.name) }))
+      .concat(r.columns.aOnly.map((n) => ({ name: n, a: r.a.headers.indexOf(n), b: null, diff: true })))
+      .concat(r.columns.bOnly.map((n) => ({ name: n, a: null, b: r.b.headers.indexOf(n), diff: true })));
+    if (v.syncDiffCols) cols = cols.filter((c) => c.diff);
+
+    // Lignes alignées : ordre de A, puis les lignes propres à B
+    const search = v.syncSearch.trim().toLowerCase();
+    let keys = r.a.order.concat(r.onlyB).filter((k) =>
+      (!search || k.toLowerCase().includes(search)) &&
+      (!v.syncDiffRows || diffSets.has(k) || onlyA.has(k) || onlyB.has(k))
+    );
+    let truncated = false;
+    const maxRows = Math.max(1, Math.floor(MAX_GRID_CELLS / 2 / Math.max(cols.length, 1)));
+    if (keys.length > maxRows) {
+      keys = keys.slice(0, maxRows);
+      truncated = true;
+    }
+
+    const colgroup = '<colgroup><col data-px="' + SYNC_KEY_W + '"><col data-px="56">' +
+      cols.map(() => '<col data-px="' + SYNC_COL_W + '">').join('') + '</colgroup>';
+
+    const table = (s) => {
+      const tt = r[s];
+      const head = '<thead><tr><th class="sticky-col">CLE</th><th class="num-col">#</th>' +
+        cols.map((c) => '<th class="' + (c[s] == null ? 'col-missing' : c.diff ? 'col-diff' : '') + '" title="' + esc(c.name) + '">' + esc(c.name) + '</th>').join('') +
+        '</tr></thead>';
+      const body = keys.map((k, i) => {
+        const row = tt.map.get(k);
+        if (!row) {
+          return '<tr class="absent" data-i="' + i + '"><th class="sticky-col" title="' + esc(k) + '">' + esc(k) + '<span class="tag-absent">absente</span></th>' +
+            '<td class="num-col">' + (i + 1) + '</td>' + cols.map(() => '<td></td>').join('') + '</tr>';
+        }
+        const ds = diffSets.get(k);
+        return '<tr data-i="' + i + '"><th class="sticky-col" title="' + esc(k) + '">' + esc(k) + '</th><td class="num-col">' + (i + 1) + '</td>' +
+          cols.map((c) => {
+            if (c[s] == null) return '<td class="col-missing"></td>';
+            const val = row[c[s]] == null ? '' : row[c[s]];
+            const cls = ds && ds.has(c.name) ? ' class="diff"' : '';
+            return '<td' + cls + ' title="' + esc(val) + '">' + cellText(val) + '</td>';
+          }).join('') + '</tr>';
+      }).join('');
+      return '<div class="sync-block ' + s + '">' +
+        '<p class="sync-title ' + s + '"><span class="src-tag">' + s.toUpperCase() + '</span>' + name(s) +
+        ' <span class="muted">· ' + esc(fileName(s)) + '</span></p>' +
+        '<div class="sync-scroll" data-side="' + s + '"><table class="sync">' + colgroup + head + '<tbody>' + body + '</tbody></table></div></div>';
+    };
+
+    const controls =
+      '<div class="controls">' +
+        '<input type="search" class="search" data-field="syncSearch" placeholder="Filtrer par CLE…" value="' + esc(v.syncSearch) + '">' +
+        '<label class="toggle"><input type="checkbox" class="sync-diff-rows"' + (v.syncDiffRows ? ' checked' : '') + '> Lignes en écart uniquement</label>' +
+        '<label class="toggle"><input type="checkbox" class="sync-diff-cols"' + (v.syncDiffCols ? ' checked' : '') + '> Colonnes en écart uniquement</label>' +
+        '<label class="toggle">Lignes visibles <select class="rows-select">' +
+          [5, 10, 20].map((n) => '<option' + (n === syncRows ? ' selected' : '') + '>' + n + '</option>').join('') +
+        '</select></label>' +
+        '<span class="muted">' + fmt(keys.length) + ' ligne(s) · ' + fmt(cols.length) + ' colonne(s)</span>' +
+      '</div>' +
+      '<p class="legend">Les deux tables défilent ensemble, verticalement et horizontalement. Les lignes et les colonnes sont alignées par CLE et par nom. ' +
+        '<span class="sw diff-sw"></span>Valeur en écart <span class="sw miss-sw"></span>Ligne ou colonne absente</p>' +
+      (truncated ? '<p class="warnings">Affichage limité aux ' + fmt(keys.length) + ' premières lignes. Utilisez les filtres.</p>' : '');
+
+    if (!keys.length || !cols.length) {
+      return controls + '<p class="empty-state">Aucune ligne ou colonne à afficher avec ces filtres.</p>';
+    }
+    return controls + table('a') + table('b');
+  }
+
+  // Nom du fichier chargé pour une source de la table sélectionnée
+  function fileName(s) {
+    const t = findTable(state.selectedId);
+    return t && t.files[s] ? t.files[s].name : '';
+  }
+
+  function setupSync() {
+    const panes = Array.from(document.querySelectorAll('#detail .sync-scroll'));
+    if (panes.length !== 2) return;
+    // Largeurs identiques au pixel près pour que les colonnes restent alignées
+    document.querySelectorAll('#detail table.sync').forEach((tbl) => {
+      let total = 0;
+      tbl.querySelectorAll('col[data-px]').forEach((c) => {
+        const w = Number(c.getAttribute('data-px'));
+        c.style.width = w + 'px';
+        total += w;
+      });
+      tbl.style.width = total + 'px';
+    });
+    // Hauteur : en-tête + N lignes + barre de défilement horizontale
+    panes.forEach((p) => {
+      const head = p.querySelector('thead tr');
+      const row = p.querySelector('tbody tr');
+      if (!head || !row) return;
+      p.style.height = '';
+      const scrollbar = p.offsetHeight - p.clientHeight;
+      p.style.height = head.offsetHeight + row.offsetHeight * syncRows + scrollbar + 2 + 'px';
+    });
+    // Défilement lié (on n'affecte que si la position diffère, ce qui évite les boucles)
+    panes.forEach((p) => {
+      p.addEventListener('scroll', () => {
+        panes.forEach((o) => {
+          if (o === p) return;
+          if (o.scrollTop !== p.scrollTop) o.scrollTop = p.scrollTop;
+          if (o.scrollLeft !== p.scrollLeft) o.scrollLeft = p.scrollLeft;
+        });
+      }, { passive: true });
+      // Survol : surligne la même ligne dans les deux tables
+      p.addEventListener('mouseover', (e) => {
+        const tr = e.target.closest('tbody tr');
+        if (!tr) return;
+        const i = tr.getAttribute('data-i');
+        document.querySelectorAll('#detail .sync tr.hover').forEach((x) => x.classList.remove('hover'));
+        document.querySelectorAll('#detail .sync tr[data-i="' + i + '"]').forEach((x) => x.classList.add('hover'));
+      });
+      p.addEventListener('mouseleave', () => {
+        document.querySelectorAll('#detail .sync tr.hover').forEach((x) => x.classList.remove('hover'));
+      });
+    });
   }
 
   function renderRaw(t, r) {
@@ -626,6 +763,9 @@
     detail.addEventListener('change', (e) => {
       if (e.target.classList.contains('col-filter')) state.view.column = e.target.value;
       else if (e.target.classList.contains('all-cols')) state.view.allCols = e.target.checked;
+      else if (e.target.classList.contains('sync-diff-rows')) state.view.syncDiffRows = e.target.checked;
+      else if (e.target.classList.contains('sync-diff-cols')) state.view.syncDiffCols = e.target.checked;
+      else if (e.target.classList.contains('rows-select')) syncRows = Number(e.target.value);
       else return;
       renderDetail();
     });

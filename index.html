@@ -33,8 +33,22 @@
         <button type="button" id="add-table" class="btn primary">+ Ajouter une table</button>
       </div>
       <div class="source-names">
-        <label><span class="sw sa"></span> Source A <input type="text" id="name-a" maxlength="40" spellcheck="false"></label>
-        <label><span class="sw sb"></span> Source B <input type="text" id="name-b" maxlength="40" spellcheck="false"></label>
+        <label class="src-field a">
+          <span class="src-tag">A</span>
+          <span class="src-body">
+            <span class="src-label">Nom de la source A</span>
+            <input type="text" id="name-a" maxlength="40" spellcheck="false" autocomplete="off">
+          </span>
+          <span class="src-edit" aria-hidden="true">✎</span>
+        </label>
+        <label class="src-field b">
+          <span class="src-tag">B</span>
+          <span class="src-body">
+            <span class="src-label">Nom de la source B</span>
+            <input type="text" id="name-b" maxlength="40" spellcheck="false" autocomplete="off">
+          </span>
+          <span class="src-edit" aria-hidden="true">✎</span>
+        </label>
       </div>
       <div id="tables"></div>
 
