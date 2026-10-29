@@ -35,6 +35,9 @@ Ensuite :
    - *Synthèse par colonne* : nombre de lignes en écart par colonne, utile pour repérer
      une règle de calcul fausse (cliquer sur une colonne filtre la grille) ;
    - *Lignes manquantes* et *Doublons de CLE*.
+   - *Comparaison synchronisée* : la table A au-dessus de la table B (5, 10 ou 20 lignes
+     visibles), alignées par CLE et par nom de colonne, avec un défilement vertical et
+     horizontal lié entre les deux. Les valeurs en écart sont surlignées ;
    - *Données brutes* : contenu complet du fichier de l'une ou l'autre source, avec recherche,
      cellules en écart surlignées et lignes absentes de l'autre source mises en évidence.
 5. **Exporter** les écarts au format CSV (séparateur `;`, compatible Excel FR).

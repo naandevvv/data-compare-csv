@@ -251,7 +251,57 @@ p.warnings { padding-left: 12px; }
 .sw.dup-sw { background: var(--warn); margin-left: 8px; }
 
 /* Noms des sources */
-.source-names { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 12px 0; }
-.source-names label { display: flex; align-items: center; gap: 6px; font-weight: 600; color: var(--muted); }
-.source-names input { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; width: 180px; }
-.source-names input:focus { outline: none; border-color: var(--accent); }
+.source-names { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 300px)); gap: 10px; margin: 14px 0; }
+.src-field {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px 8px 8px; cursor: text;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+  transition: border-color .15s, box-shadow .15s, background .15s;
+}
+.src-field:hover { border-color: var(--muted); }
+.src-field:focus-within { background: var(--surface); }
+.src-field.a:focus-within { border-color: var(--src-a); box-shadow: 0 0 0 3px var(--src-a-bg); }
+.src-field.b:focus-within { border-color: var(--src-b); box-shadow: 0 0 0 3px var(--src-b-bg); }
+.src-tag {
+  flex: none; width: 32px; height: 32px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 15px;
+}
+.src-field.a .src-tag { background: var(--src-a-bg); color: var(--src-a); }
+.src-field.b .src-tag { background: var(--src-b-bg); color: var(--src-b); }
+.src-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.src-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.src-body input {
+  font: inherit; font-weight: 700; font-size: 15px; color: var(--text); background: transparent;
+  border: 0; padding: 0; margin: 0; width: 100%; outline: none;
+}
+.src-body input::placeholder { color: var(--muted); font-weight: 400; }
+.src-edit { color: var(--muted); font-size: 14px; opacity: .6; transition: opacity .15s; }
+.src-field:hover .src-edit, .src-field:focus-within .src-edit { opacity: 1; }
+
+/* Comparaison synchronisée */
+.sync-block { margin-top: 12px; }
+.sync-title { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 13px; font-weight: 700; }
+.sync-title .src-tag { width: 24px; height: 24px; font-size: 12px; border-radius: 6px; }
+.sync-title.a .src-tag { background: var(--src-a-bg); color: var(--src-a); }
+.sync-title.b .src-tag { background: var(--src-b-bg); color: var(--src-b); }
+.sync-scroll { overflow: auto; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+.sync-block.a .sync-scroll { border-top: 3px solid var(--src-a); }
+.sync-block.b .sync-scroll { border-top: 3px solid var(--src-b); }
+.sync { table-layout: fixed; width: auto; border-collapse: separate; border-spacing: 0; font-family: var(--mono); font-size: 12px; }
+.sync th, .sync td {
+  height: 30px; padding: 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); vertical-align: middle;
+}
+.sync thead th { position: sticky; top: 0; z-index: 2; background: var(--surface-2); color: var(--muted); font-weight: 600; }
+.sync .sticky-col { position: sticky; left: 0; z-index: 1; background: var(--surface); font-weight: 600; }
+.sync thead .sticky-col { z-index: 3; background: var(--surface-2); }
+.sync .num-col { color: var(--muted); text-align: right; font-weight: 400; }
+.sync td.diff { background: var(--bad-bg); color: var(--bad); font-weight: 700; }
+.sync th.col-diff { color: var(--bad); }
+.sync .col-missing, .sync tr.absent td {
+  background: repeating-linear-gradient(45deg, transparent 0 6px, var(--surface-2) 6px 12px);
+}
+.sync tr.absent .sticky-col { color: var(--muted); }
+.sync .tag-absent { font-family: system-ui, sans-serif; font-size: 10px; font-weight: 700; color: var(--warn); background: var(--warn-bg); padding: 1px 5px; border-radius: 4px; margin-left: 6px; }
+.sync tbody tr.hover td, .sync tbody tr.hover th { box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
+.sync tbody tr.hover .sticky-col { box-shadow: inset 3px 0 0 var(--accent), inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
+.controls select.rows-select { width: auto; }
